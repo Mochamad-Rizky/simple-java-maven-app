@@ -5,6 +5,9 @@ pipeline {
             args '-u root'
         }
     }
+    triggers {
+        pollSCM('*/2 * * * *')
+    }
     stages {
         stage('Build') {
             steps {
