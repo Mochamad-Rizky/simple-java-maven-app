@@ -1,36 +1,12 @@
 pipeline {
     agent {
         docker {
-            image 'maven:3.9.2'
-            args '-u root --network host -v $HOME/.m2:/root/.m2'
+            image 'maven:3.9.9-ibm-semeru-23-jammy'
+            args '-u root'
         }
     }
     stages {
-        stage('Setup Maven') {
-            steps {
-                script {
-                    // Create custom settings.xml with mirror configuration
-                    writeFile file: 'settings.xml', text: '''
-<?xml version="1.0" encoding="UTF-8"?>
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
-          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
-    <mirrors>
-        <mirror>
-            <id>central-secure</id>
-            <name>Maven Central</name>
-            <url>https://repo1.maven.org/maven2</url>
-            <mirrorOf>central</mirrorOf>
-        </mirror>
-    </mirrors>
-</settings>
-'''
-                    // Set DNS servers explicitly
-                    sh 'echo "nameserver 8.8.8.8" > /etc/resolv.conf'
-                    sh 'echo "nameserver 8.8.4.4" >> /etc/resolv.conf'
-                }
-            }
-        }    
+        
         stage('Build') {
             steps {
                 sh 'mvn -B -DskipTests clean package'
