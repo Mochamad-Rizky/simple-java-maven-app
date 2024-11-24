@@ -34,14 +34,10 @@ pipeline {
 
                 sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
                     // Copy JAR file to EC2
-                    sh """
-                        scp -o StrictHostKeyChecking=no -r target/my-app-*.jar ubuntu@52.55.5.102:/home/ubuntu/target-java/
-                    """
+                    sh 'scp -o StrictHostKeyChecking=no -r target/my-app-*.jar ubuntu@52.55.5.102:/home/ubuntu/target-java/'
                     
                     // Execute the JAR on EC2
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'cd /home/ubuntu/target-java && nohup java -jar my-app-*.jar > app.log 2>&1 &'
-                    """
+                    sh 'ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 "cd /home/ubuntu/target-java && nohup java -jar my-app-*.jar > app.log 2>&1 &"'
                 }
             }
         }
