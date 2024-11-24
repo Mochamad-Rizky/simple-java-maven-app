@@ -2,77 +2,19 @@ pipeline {
     agent {
         docker {
             image 'maven:3.9.0'
-            args '''
-                -v /root/.m2:/root/.m2 \
-                --group-add 0 \
-                -u root \
-                --network host \
-                --dns 8.8.8.8 \
-                --dns 8.8.4.4
-            '''
+            args '-u root'
         }
     }
-    
     stages {
-        stage('Prepare Workspace') {
-            steps {
-                sh 'chmod -R 777 .'
-                
-                // Verify network connectivity
-                sh '''
-                    echo "Testing network connectivity..."
-                    ping -c 1 repo.maven.apache.org || echo "Ping failed but continuing..."
-                    
-                    echo "Checking DNS resolution..."
-                    nslookup repo.maven.apache.org || echo "DNS lookup failed but continuing..."
-                    
-                    echo "Current DNS settings:"
-                    cat /etc/resolv.conf
-                '''
-            }
-        }
-        
-        stage('Update Maven Settings') {
-            steps {
-                script {
-                    // Create custom settings.xml with mirrors
-                    writeFile file: 'settings.xml', text: '''
-                        <settings>
-                            <mirrors>
-                                <mirror>
-                                    <id>central-https</id>
-                                    <url>https://repo1.maven.org/maven2</url>
-                                    <mirrorOf>central</mirrorOf>
-                                </mirror>
-                            </mirrors>
-                        </settings>
-                    '''
-                }
-                
-                // Use the custom settings file
-                sh 'mkdir -p /root/.m2 && cp settings.xml /root/.m2/'
-            }
-        }
-        
         stage('Build') {
             steps {
-                // Add retry mechanism for network issues
-                retry(3) {
-                    sh '''
-                        mvn -B \
-                        -Dmaven.clean.failOnError=false \
-                        -DskipTests \
-                        clean package \
-                        --settings settings.xml \
-                        -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
-                    '''
-                }
+                sh 'mvn clean install -U'
+                sh 'mvn -B -DskipTests clean package'
             }
         }
-        
         stage('Test') {
             steps {
-                sh 'mvn test --settings settings.xml'
+                sh 'mvn test'
             }
             post {
                 always {
@@ -80,56 +22,36 @@ pipeline {
                 }
             }
         }
-        
         stage('Manual Approval') {
             steps {
                 input message: 'Lanjutkan ke tahap Deploy?', ok: 'Proceed'
             }
         }
-        
+
         stage('Deploy') {
             steps {
                 sh './jenkins/scripts/deliver.sh'
                 sleep 1
-                
+
+                // Archive the artifacts
                 script {
-                    try {
-                        def jarFile = sh(script: 'find target/ -name "*.jar"', returnStdout: true).trim()
+                    def jarFile = sh(script: 'find target/ -name "*.jar"', returnStdout: true).trim()
+                    archiveArtifacts artifacts: jarFile, fingerprint: true
+                    
+                    sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
+                        // Copy JAR file to EC2
+                        sh """
+                            scp -o StrictHostKeyChecking=no ${jarFile} ubuntu@52.55.5.102:/home/ubuntu/target-java/
+                        """
                         
-                        if (jarFile) {
-                            archiveArtifacts artifacts: jarFile, fingerprint: true
-                            
-                            sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
-                                sh """
-                                    scp -o StrictHostKeyChecking=no ${jarFile} ubuntu@52.55.5.102:/home/ubuntu/target-java/
-                                """
-                                
-                                def jarName = jarFile.split('/')[-1]
-                                sh """
-                                    ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'pkill -f ${jarName} || true'
-                                """
-                                
-                                sh """
-                                    ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 '
-                                        cd /home/ubuntu/target-java && 
-                                        nohup java -jar ${jarName} > app.log 2>&1 &
-                                    '
-                                """
-                            }
-                        } else {
-                            error "No JAR file found in target directory"
-                        }
-                    } catch (Exception e) {
-                        error "Deploy failed: ${e.getMessage()}"
+                        // Execute the JAR on EC2
+                        def jarName = jarFile.split('/')[-1]
+                        sh """
+                            ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'cd /home/ubuntu/target-java && nohup java -jar ${jarName} > app.log 2>&1 &'
+                        """
                     }
                 }
             }
-        }
-    }
-    
-    post {
-        always {
-            cleanWs()
         }
     }
 }
