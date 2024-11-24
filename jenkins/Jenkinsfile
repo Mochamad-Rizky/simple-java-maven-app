@@ -29,12 +29,13 @@ pipeline {
         stage('Manual Approval') {
             steps {
                 input message: 'Lanjutkan ke tahap Deploy?', ok: 'Proceed'
-                sh './jenkins/scripts/deliver.sh'
             }
         }
 
         stage('Deploy') {
             steps {
+                sh './jenkins/scripts/deliver.sh'
+                sleep 60
 
                 sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
                     // Copy JAR file to EC2
