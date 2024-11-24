@@ -39,7 +39,8 @@ pipeline {
 
                 sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
                     // Copy JAR file to EC2
-                    sh 'scp -o StrictHostKeyChecking=no -r target/my-app-*.jar ubuntu@52.55.5.102:/home/ubuntu/target-java'
+                    sh 'ls -l target'
+                    // sh 'scp -o StrictHostKeyChecking=no -r target/my-app-*.jar ubuntu@52.55.5.102:/home/ubuntu/target-java'
                     
                     // join to ec2
                     // sh '''ssh -tt -o StrictHostKeyChecking=no ubuntu@52.55.5.102 << EOF
