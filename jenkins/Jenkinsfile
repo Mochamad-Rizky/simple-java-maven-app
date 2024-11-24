@@ -32,23 +32,16 @@ pipeline {
                 sh './jenkins/scripts/deliver.sh'
                 sleep 1
 
-                // Archive the artifacts
-                script {
-                    def jarFile = sh(script: 'find target/ -name "*.jar"', returnStdout: true).trim()
-                    archiveArtifacts artifacts: jarFile, fingerprint: true
+                sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
+                    // Copy JAR file to EC2
+                    sh """
+                        scp -o StrictHostKeyChecking=no -r target/my-app-*.jar ubuntu@52.55.5.102:/home/ubuntu/target-java/
+                    """
                     
-                    sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
-                        // Copy JAR file to EC2
-                        sh """
-                            scp -o StrictHostKeyChecking=no ${jarFile} ubuntu@52.55.5.102:/home/ubuntu/target-java/
-                        """
-                        
-                        // Execute the JAR on EC2
-                        def jarName = jarFile.split('/')[-1]
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'cd /home/ubuntu/target-java && nohup java -jar ${jarName} > app.log 2>&1 &'
-                        """
-                    }
+                    // Execute the JAR on EC2
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'cd /home/ubuntu/target-java && nohup java -jar my-app-*.jar > app.log 2>&1 &'
+                    """
                 }
             }
         }
