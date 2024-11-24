@@ -2,15 +2,25 @@ pipeline {
     agent {
         docker {
             image 'maven:3.9.0'
-            args '-v /root/.m2:/root/.m2'
+            args '-v /root/.m2:/root/.m2 --group-add 0 -u root'  // Run as root to handle permissions
         }
     }
+    
     stages {
-        stage('Build') {
+        stage('Prepare Workspace') {
             steps {
-                sh 'mvn -B -DskipTests clean package'
+                // Ensure proper permissions on workspace
+                sh 'chmod -R 777 .'
             }
         }
+        
+        stage('Build') {
+            steps {
+                // Add -Dmaven.clean.failOnError=false to prevent clean failures
+                sh 'mvn -B -Dmaven.clean.failOnError=false -DskipTests clean package'
+            }
+        }
+        
         stage('Test') {
             steps {
                 sh 'mvn test'
@@ -21,36 +31,65 @@ pipeline {
                 }
             }
         }
+        
         stage('Manual Approval') {
             steps {
                 input message: 'Lanjutkan ke tahap Deploy?', ok: 'Proceed'
             }
         }
-
+        
         stage('Deploy') {
             steps {
                 sh './jenkins/scripts/deliver.sh'
                 sleep 1
-
-                // Archive the artifacts
+                
                 script {
-                    def jarFile = sh(script: 'find target/ -name "*.jar"', returnStdout: true).trim()
-                    archiveArtifacts artifacts: jarFile, fingerprint: true
-                    
-                    sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
-                        // Copy JAR file to EC2
-                        sh """
-                            scp -o StrictHostKeyChecking=no ${jarFile} ubuntu@52.55.5.102:/home/ubuntu/target-java/
-                        """
+                    // Use try-catch to handle potential file finding issues
+                    try {
+                        def jarFile = sh(script: 'find target/ -name "*.jar"', returnStdout: true).trim()
                         
-                        // Execute the JAR on EC2
-                        def jarName = jarFile.split('/')[-1]
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'cd /home/ubuntu/target-java && nohup java -jar ${jarName} > app.log 2>&1 &'
-                        """
+                        if (jarFile) {
+                            archiveArtifacts artifacts: jarFile, fingerprint: true
+                            
+                            sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
+                                // Ensure target directory exists on EC2
+                                sh """
+                                    ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'mkdir -p /home/ubuntu/target-java'
+                                """
+                                
+                                // Copy JAR file to EC2
+                                sh """
+                                    scp -o StrictHostKeyChecking=no ${jarFile} ubuntu@52.55.5.102:/home/ubuntu/target-java/
+                                """
+                                
+                                // Kill existing Java process if running
+                                sh """
+                                    ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'pkill -f ${jarFile.split('/')[-1]} || true'
+                                """
+                                
+                                // Execute the JAR on EC2 with proper logging
+                                def jarName = jarFile.split('/')[-1]
+                                sh """
+                                    ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 '
+                                        cd /home/ubuntu/target-java && 
+                                        nohup java -jar ${jarName} > app.log 2>&1 &
+                                    '
+                                """
+                            }
+                        } else {
+                            error "No JAR file found in target directory"
+                        }
+                    } catch (Exception e) {
+                        error "Deploy failed: ${e.getMessage()}"
                     }
                 }
             }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()  // Clean workspace after build
         }
     }
 }
