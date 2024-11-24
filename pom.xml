@@ -51,6 +51,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
         <version>3.5.0</version>
+        <type>maven-plugin</type>
         <executions>
           <execution>
             <id>enforce-maven</id>
