@@ -1,50 +1,52 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.9.0'
-            args '-u root'
-        }
-    }
+    // agent {
+    //     docker {
+    //         image 'maven:3.9.0'
+    //         args '-u root'
+    //     }
+    // }
+
+    agent any
 
     environment {
         CI = 'true'
     }
 
     stages {
-        stage('Build') {
-            steps {
-                sh 'mvn -B -DskipTests clean package'
-            }
-        }
-        stage('Test') {
-            steps {
-                sh 'mvn test'
-            }
-            post {
-                always {
-                    junit 'target/surefire-reports/*.xml'
-                }
-            }
-        }
-        stage('Manual Approval') {
-            steps {
-                input message: 'Lanjutkan ke tahap Deploy?', ok: 'Proceed'
-            }
-        }
+        // stage('Build') {
+        //     steps {
+        //         sh 'mvn -B -DskipTests clean package'
+        //     }
+        // }
+        // stage('Test') {
+        //     steps {
+        //         sh 'mvn test'
+        //     }
+        //     post {
+        //         always {
+        //             junit 'target/surefire-reports/*.xml'
+        //         }
+        //     }
+        // }
+        // stage('Manual Approval') {
+        //     steps {
+        //         input message: 'Lanjutkan ke tahap Deploy?', ok: 'Proceed'
+        //     }
+        // }
 
         stage('Deploy') {
             steps {
-                sh './jenkins/scripts/deliver.sh'
-                sleep 1
+                // sh './jenkins/scripts/deliver.sh'
+                // sleep 1
 
-                // sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
-                //     // join to ec2
-                //     sh '''ssh -tt -o StrictHostKeyChecking=no ubuntu@52.55.5.102 << EOF
-                //     whoami
-                //     exit
-                //     EOF'''
-                //     // sh 'scp -o StrictHostKeyChecking=no -r ./build/* ubuntu@52.55.5.102:/var/www/html/react-fe'
-                // }
+                sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
+                    // join to ec2
+                    sh '''ssh -tt -o StrictHostKeyChecking=no ubuntu@52.55.5.102 << EOF
+                    whoami
+                    exit
+                    EOF'''
+                    // sh 'scp -o StrictHostKeyChecking=no -r ./build/* ubuntu@52.55.5.102:/var/www/html/react-fe'
+                }
             }
         }
 
