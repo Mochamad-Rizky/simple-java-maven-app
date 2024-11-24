@@ -1,19 +1,56 @@
-node {
-    docker.image('maven:3.9.2').inside('-u root') {
-        stage('Build') {
-            sh 'mvn -B -DskipTests clean package'
+pipeline {
+    agent {
+        docker {
+            image 'maven:3.9.2'
+            args '-u root'
         }
-        
-        stage('Test') {
-            try {
-                sh 'mvn test'
-            } finally {
-                junit 'target/surefire-reports/*.xml'
+    }
+    stages {
+        stage('Build') {
+            steps {
+                sh 'mvn -B -DskipTests clean package'
             }
         }
-        
-        stage('Deliver') {
-            sh './jenkins/scripts/deliver.sh'
+        stage('Test') {
+            steps {
+                script {
+                    try {
+                        sh 'mvn test'
+                    } finally {
+                        junit 'target/surefire-reports/*.xml'
+                    }
+                }
+            }
+        }
+
+        stage('Manual Approval') {
+            steps {
+                input message: 'Lanjutkan ke tahap Deploy?', ok: 'Proceed'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh './jenkins/scripts/deliver.sh'
+                sleep 1
+
+                // Archive the artifacts
+                def jarFile = sh(script: 'find target/ -name "*.jar"', returnStdout: true).trim()
+                archiveArtifacts artifacts: jarFile, fingerprint: true
+                
+                sshagent(credentials: ['1d660cae-20a2-41e2-b380-ee6962a8c6c3']) {
+                    // Copy JAR file to EC2
+                    sh """
+                        scp -o StrictHostKeyChecking=no ${jarFile} ubuntu@52.55.5.102:/home/ubuntu/target-java/
+                    """
+                    
+                    // Execute the JAR on EC2
+                    def jarName = jarFile.split('/')[-1]
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ubuntu@52.55.5.102 'cd /home/ubuntu/target-java && nohup java -jar ${jarName} > app.log 2>&1 &'
+                    """
+                }
+            }
         }
     }
 }
